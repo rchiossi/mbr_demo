@@ -1,19 +1,14 @@
-;;; Lissajous Curves Demo for IO
-;;; by p1ra
-	
 BITS 16
 	
 %define NPOINTS 	0x7FFF
-%define SCALEX		0x50
-%define SCALEY		0x50	
-%define MAXRATIO	0xE
+%define SCALE		0x50
+%define MAXRATIO	0xC
 
 %define STEP		[ebp-4]	
 %define RATIO		[ebp-4]	
 %define RES		[ebp-4]
 %define T		[ebp-8]	
 %define RATE		[ebp-12]
-%define SCALE		[ebp-16]
 
 SECTION .text
 
@@ -25,12 +20,10 @@ init:
 	mov ax,0x13
 	int 0x10
 
-	;; set video address to es
+	;; set video address to ds
 	push 0xA000
-	pop es
-
-	push 0x7BFF
 	pop ds
+
 	;; set pallete ------
 
 	;; set color index 0
@@ -75,7 +68,7 @@ init:
 	;; end set pallet -----
 
 	mov STEP,word 0x2
-	mov di,0x6
+	mov di,0x4
 _draw:
 	;; fill the background ------
 	mov bx,0xfa00
@@ -135,7 +128,7 @@ _fill_loop:
 	mov ax,STEP
 	cmp di,MAXRATIO
 	je _inv
-	cmp di,word 0x4
+	cmp di,word 0x2
 	jz _inv
 	jmp _update_ratio
 _inv:
@@ -143,22 +136,19 @@ _inv:
 	mov STEP,ax
 _update_ratio:	
 	add di,ax
-
-	;; swap buffer
-	push di
-	mov cx,320*200/2
-	xor si,si
-	xor di,di
-	rep movsw
-	pop di
 	
 	;; wait 0.5s --------
-	mov cx,word 0x3
+	mov cx,word 0x7
 	mov dx,word 0xA120
 	mov ah,0x86
 	int 0x15
 
+%if 0
 	jmp _draw
+%else
+_stop:	
+	jmp _stop
+%endif
 	
 p_draw_lis:
 	push ebp
@@ -171,7 +161,6 @@ p_draw_lis:
 _loop_lis:
 	mov ax,cx
 	mov bx,0x1
-	mov dx,SCALEX
 	call p_calc_pos
 	mov bx,ax		;bx = x
 
@@ -179,7 +168,6 @@ _loop_lis:
 	
 	mov ax,cx
 	mov bx,RATIO
-	mov dx,SCALEY
 	call p_calc_pos
 
 	pop bx 			;restore x value
@@ -206,16 +194,15 @@ _loop_lis:
 	pop ebp
 	ret
 	
-;;; calculate xy for the lissajous curve
-;;; xy = scale*sin(t*rate*2pi/npoints)
+;;; calculate X for the lissajous curve
+;;; x = scale*sin(t*rate*2pi/npoints)
 p_calc_pos:
 	push ebp
 	mov ebp,esp	
-	sub esp,0x20
+	sub esp,0x16
 
 	mov T,ax
 	mov RATE,bx
-	mov SCALE,dx
 	
 	fldpi			;push pi
 	
@@ -237,13 +224,14 @@ p_calc_pos:
 	
 	fsin			;sin(g)
 	
-	fild word SCALE		;push scale
+	mov [esp], word SCALE
+	fild word [esp]		;push scale
 	fmulp st1,st0		;scale*sin(g)
 	
 	fistp word RES	;pop RES
 	mov ax,RES
 	
-	add esp, 0x20
+	add esp, 0x16
 	pop ebp
 	ret	 
 
@@ -284,11 +272,7 @@ p_draw_block:
 	jnz p_draw_block
 	ret
 %endif
-
-padding:	times 446 - ($ - $$) db 0 	;padding
-partitiontable:	times 64 db 0xff 		;partition table
+	
+times 446 - ($ - $$) db 'U' 	;padding
+times 64 db 'x' 		;partition table
 db 0x55,0xaa
-
-%if 1	
-times 934- (partitiontable - padding) db 0x41
-%endif

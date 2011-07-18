@@ -284,11 +284,7 @@ p_draw_block:
 	jnz p_draw_block
 	ret
 %endif
-
-padding:	times 446 - ($ - $$) db 0 	;padding
-partitiontable:	times 64 db 0xff 		;partition table
+	
+times 446 - ($ - $$) db 'U' 	;padding
+times 64 db 'x' 		;partition table
 db 0x55,0xaa
-
-%if 1	
-times 934- (partitiontable - padding) db 0x41
-%endif

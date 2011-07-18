@@ -1,10 +1,11 @@
 BITS 16
 	
-%define NPOINTS 	0x80
-%define SCALE		0x40
+%define NPOINTS 	0x7FFF
+%define SCALE		0x50
 
-SECTION .data
-RES:	db 0
+%define RES		[ebp-4]
+%define T		[ebp-8]	
+%define RATE		[ebp-12]
 
 SECTION .text
 
@@ -15,7 +16,7 @@ init:
 
 	;; set video address to ds
 	push 0xA000
-	pop es
+	pop ds
 
 	;; set pallete ------
 
@@ -51,28 +52,43 @@ init:
 	mov bx,0xfa00
 _fill_loop:
 	xor al,al
-	mov byte [es:bx],al
+	mov byte [bx],al
 	dec bx
 	jnz _fill_loop
 	;; end fill the background ---
 
 	;; draw the curve ----------
-	mov cx,0x140
+	mov cx,word NPOINTS
 _loop_lis:
 	mov ax,cx
-	call p_calc_sin
+	mov bx,0x1
+	call p_calc_pos
+	mov bx,ax		;bx = x
 
-	mov ax,[RES]		;ax = y
-	mov bx,cx		;bx = x
+	push bx			;save x value
 	
-	add ax,0x64 		;align to center
+	mov ax,cx
+	mov bx,0x8
+	call p_calc_pos
+
+	pop bx 			;restore x value
+
+	%if 1
+	mov dx,0xc8
+	sub dx,ax
+	mov ax,dx
+	%endif
+	
+	add ax,0x64 		;align y to center
 
 	mov dx,0x140
 	mul dx
 	add bx,ax
+
+	add bx,0x5A
 	
 	mov al,0x1
-	mov byte [es:bx],al
+	mov byte [bx],al
 	
 	dec cx
 	jnz _loop_lis
@@ -81,38 +97,47 @@ _loop_lis:
 _wait_forever:
 	jmp _wait_forever	
 
-;;; calculate the sin
-p_calc_sin:
-	sub esp,0x4		;stack lifting
-	
-	fldpi			;push pi to fp stack
+;;; calculate X for the lissajous curve
+;;; x = scale*sin(t*rate*2pi/npoints)
+p_calc_pos:
+	push ebp
+	mov ebp,esp	
+	sub esp,0x16
 
+	mov T,ax
+	mov RATE,bx
+	
+	fldpi			;push pi
+	
 	mov [esp],word 0x2
-	fild word [esp]		;push 2 to fp stack
+	fild word [esp]		;push 2
 
-	fmulp st1,st0		;pi*2
+	fmulp st1,st0		;2*pi
 
-	mov [esp],ax
-	fild word [esp]		;push df to fp stack
-
-	mov [esp], word NPOINTS
-	fild word [esp]		;push NPOINTS to fp stack
+	fild word RATE		;push rate
+	fild word T		;push t
+	fmulp st1,st0 		;a*t
 	
-	fdivp st1,st0		;df/NPOINTS
+	mov [esp], word NPOINTS 
+	fild word [esp]		;push npoints	
 
-	fmulp st1,st0		;(pi*2)*(df/NPOINTS)
+	fdivp st1,st0		;(a*t)/npoints
 
-	fsin			;sin(pi*2/a)
+	fmulp st1,st0		;(2*pi)*(a*t)/npoints = g
+	
+	fsin			;sin(g)
 	
 	mov [esp], word SCALE
-	fild word [esp]
-	fmulp st1, st0		;expand the result for plotting
+	fild word [esp]		;push scale
+	fmulp st1,st0		;scale*sin(g)
 	
-	fistp word [RES]	;pop x from fp stack
+	fistp word RES	;pop RES
+	mov ax,RES
+	
+	add esp, 0x16
+	pop ebp
+	ret	 
 
-	add esp,0x4
-	ret
-	
 times 446 - ($ - $$) db 'U' 	;padding
 times 64 db 'x' 		;partition table
 db 0x55,0xaa
